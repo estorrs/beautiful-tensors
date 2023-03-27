@@ -20,7 +20,7 @@ def read_line(fp, pad=20, background=254):
     rs, cs = torch.where(img<background)
     img = img[torch.min(rs) - pad:torch.max(rs) + pad, torch.min(cs):torch.max(cs)]
     img = img < background
-    
+
     return img
 
 
@@ -40,7 +40,7 @@ def coordinates_from_mask(mask, step=100, pad=20, window_size=11):
     pts = torch.tensor(pts, dtype=torch.float32)
     # scale y by step
     pts /= step
-    
+
     if window_size is not None:
         smoothed = torch.zeros_like(pts)
         for i in range(pts.shape[1]):
@@ -68,7 +68,6 @@ def convert_to_obj_pts(pts, start=None, stop=None, length=None, height=None, cen
     start = start if start is not None else 0
     stop = stop if stop is not None else pts.shape[0]
     size = stop - start
-    diam = pts[0, 2] - pts[0, 0]
 
     xy = [[i - start, pts[i, 0]] for i in range(start, stop, 1)]
     cap = get_cap(pts[start:stop], positive=True)
@@ -79,31 +78,31 @@ def convert_to_obj_pts(pts, start=None, stop=None, length=None, height=None, cen
     xy += [[x, y] for y, x in cap]
 
     xy = np.asarray(xy)
-    
+
     w, h = xy.max(0) - xy.min(0)
     ratio = h / w
     if length is not None:
         xy[:, 0] /= w
         xy[:, 0] *= length
-        
+
         xy[:, 1] /= h
         if height is None:
             xy[:, 1] *= ratio * length
         else:
             xy[:, 1] *= height
-            
+ 
     if center:
         idxs = np.where(xy[:, 0] == 0)[0]
         assert len(idxs)==2
         v1, v2 = xy[idxs[0], 1],  xy[idxs[1], 1]
         y_center = abs((v1 - v2) / 2.) + min(v1, v2)
         xy[:, 1] -= y_center
-            
+  
     return xy
 
 
 class ImageStroke(object):
-    def __init__(self, filepath, background=254., step=100, window_size=11):
+    def __init__(self, filepath, background=254., step=100, window_size=201):
         self.img = read_line(filepath)
         self.background = background
         self.window_size = window_size
@@ -111,16 +110,32 @@ class ImageStroke(object):
 
         self.pts = coordinates_from_mask(
             self.img, step=step, window_size=window_size)
-        
-    def __get_obj_pts(self, start=None, stop=None, length=1., height=None):
-        return convert_to_obj_pts(self.pts, start=start, stop=stop, length=10.)
+
+    def __get_obj_pts(self, start=None, stop=None, length=1., height=None, flip=False):
+        return convert_to_obj_pts(
+            self.pts if not flip else torch.flip(self.pts, dims=(0,)),
+            start=start, stop=stop, length=length)
     
-    def get_path(self, start=None, stop=None, length=1., height=None):
+    def get_path(self, start=None, stop=None, length=1., height=None, flip=False):
         start, stop = int(start * self.pts.shape[0]), int(stop * self.pts.shape[0])
-        xy = self.__get_obj_pts(start, stop, length=length, height=height)
+        xy = self.__get_obj_pts(start, stop, length=length, height=height, flip=flip)
         lines = [Line(complex(xy[i, 0], xy[i, 1]), complex(xy[i+1, 0], xy[i+1, 1]))
                  for i in range(len(xy) - 1)]
         line_obj = Path(*lines)
 
         return line_obj, xy
+
+    def sample(self, length, height=None, distances=(.2, .5), allow_flip=True):
+        distance = np.random.randint(
+            int(distances[0] * 100), int(distances[1] * 100), 1)[0] / 100
+        start_max = .9999 - distance
+        start = np.random.randint(0, int(start_max * 100), 1)[0] / 100
+        stop = start + distance
+        flip = np.random.rand() < .5 if allow_flip else False
+        return self.get_path(
+            start=start, stop=stop, length=length, height=height, flip=flip)
+
+
+        
+        
 

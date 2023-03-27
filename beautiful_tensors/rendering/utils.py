@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 from IPython.display import SVG, display
-from svgpathtools import wsvg
+from svgpathtools import wsvg, Line, Path
 
 
 def get_half_circle(r, n=100, positive=True):
@@ -19,3 +19,18 @@ def get_half_circle(r, n=100, positive=True):
 def show_svg(paths, colors=None, attributes=None, filename='test.svg'):
     wsvg(paths, colors=colors, attributes=attributes, filename=filename)
     display(SVG(filename=filename))
+
+
+def rotate_pts(xy, deg, origin=None):
+    lines = []
+    for i in range(xy.shape[0] - 1):
+        x1, y1 = xy[i]
+        x2, y2 = xy[i + 1]
+        line = Line(complex(x1, y1), complex(x2, y2))
+        lines.append(line)
+    lines = Path(*lines)
+    lines = lines.rotated(deg, lines.point(0.) if origin is None else origin)
+    
+    coords = [[lines[0].start.real, lines[0].start.imag]]
+    coords += [[l.end.real, l.end.imag] for l in lines]
+    return np.asarray(coords)
