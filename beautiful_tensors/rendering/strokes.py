@@ -13,6 +13,8 @@ from torchvision.io.image import read_image
 from beautiful_tensors.rendering.utils import get_half_circle
 
 
+DEFAULT_STROKE_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 4 (2).png'
+
 def read_line(fp, pad=20, background=254):
     img = read_image(fp)
     if img.shape[0] == 3:
@@ -73,6 +75,8 @@ def convert_to_obj_pts(pts, start=None, stop=None, length=None, height=None, cen
     cap = get_cap(pts[start:stop], positive=True)
     xy += [[x + size, y] for y, x in cap]
 
+    midline = np.asarray([[i - start, pts[i, 1]] for i in range(start, stop, 1)])
+
     xy += [[i - start, pts[i, 2]] for i in range(stop - 1, start - 1, -1)]
     cap = get_cap(pts[start:stop], positive=False)
     xy += [[x, y] for y, x in cap]
@@ -85,11 +89,17 @@ def convert_to_obj_pts(pts, start=None, stop=None, length=None, height=None, cen
         xy[:, 0] /= w
         xy[:, 0] *= length
 
+        midline[:, 0] /= w
+        midline[:, 0] *= length
+
         xy[:, 1] /= h
+        midline[:, 1] /= h
         if height is None:
             xy[:, 1] *= ratio * length
+            midline[:, 1] *= ratio * length
         else:
             xy[:, 1] *= height
+            midline[:, 1] *= height
  
     if center:
         idxs = np.where(xy[:, 0] == 0)[0]
@@ -97,12 +107,15 @@ def convert_to_obj_pts(pts, start=None, stop=None, length=None, height=None, cen
         v1, v2 = xy[idxs[0], 1],  xy[idxs[1], 1]
         y_center = abs((v1 - v2) / 2.) + min(v1, v2)
         xy[:, 1] -= y_center
+        midline[:, 1] -= y_center
   
-    return xy
+    return xy, midline
 
 
 class ImageStroke(object):
-    def __init__(self, filepath, background=254., step=100, window_size=201):
+    def __init__(self, filepath=None, background=254., step=100, window_size=51):
+        if filepath is None:
+            filepath = DEFAULT_STROKE_FP
         self.img = read_line(filepath)
         self.background = background
         self.window_size = window_size
@@ -114,18 +127,18 @@ class ImageStroke(object):
     def __get_obj_pts(self, start=None, stop=None, length=1., height=None, flip=False):
         return convert_to_obj_pts(
             self.pts if not flip else torch.flip(self.pts, dims=(0,)),
-            start=start, stop=stop, length=length)
+            start=start, stop=stop, length=length, height=height)
     
     def get_path(self, start=None, stop=None, length=1., height=None, flip=False):
         start, stop = int(start * self.pts.shape[0]), int(stop * self.pts.shape[0])
-        xy = self.__get_obj_pts(start, stop, length=length, height=height, flip=flip)
+        xy, midline = self.__get_obj_pts(start, stop, length=length, height=height, flip=flip)
         lines = [Line(complex(xy[i, 0], xy[i, 1]), complex(xy[i+1, 0], xy[i+1, 1]))
                  for i in range(len(xy) - 1)]
         line_obj = Path(*lines)
 
-        return line_obj, xy
+        return line_obj, midline
 
-    def sample(self, length, height=None, distances=(.2, .5), allow_flip=True):
+    def sample(self, length, stroke_width=None, distances=(.2, .5), allow_flip=True):
         distance = np.random.randint(
             int(distances[0] * 100), int(distances[1] * 100), 1)[0] / 100
         start_max = .9999 - distance
@@ -133,9 +146,4 @@ class ImageStroke(object):
         stop = start + distance
         flip = np.random.rand() < .5 if allow_flip else False
         return self.get_path(
-            start=start, stop=stop, length=length, height=height, flip=flip)
-
-
-        
-        
-
+            start=start, stop=stop, length=length, height=stroke_width, flip=flip)

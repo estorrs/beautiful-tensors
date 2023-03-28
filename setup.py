@@ -36,7 +36,8 @@ setup(
         'torchvision',
         'einops',
         'svgpathtools',
-        'matplotlib'
+        'matplotlib',
+        'scikit-image'
     ],
     include_package_data=True,
 

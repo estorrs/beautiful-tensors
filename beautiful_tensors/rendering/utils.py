@@ -4,6 +4,8 @@ import numpy as np
 from IPython.display import SVG, display
 from svgpathtools import wsvg, Line, Path
 
+def parse_path_from_svg(filepath):
+    pass
 
 def get_half_circle(r, n=100, positive=True):
     pi = math.pi
@@ -19,6 +21,17 @@ def get_half_circle(r, n=100, positive=True):
 def show_svg(paths, colors=None, attributes=None, filename='test.svg'):
     wsvg(paths, colors=colors, attributes=attributes, filename=filename)
     display(SVG(filename=filename))
+
+
+def path_from_pts(xy, close=False):
+    path = []
+    for i in range(len(xy) - 1):
+        path.append(Line(complex(*xy[i]), complex(*xy[i+1])))
+
+    if close:
+        path.append((Line(complex(*xy[-1]), complex(*xy[0]))))
+
+    return Path(*path)
 
 
 def rotate_pts(xy, deg, origin=None):
