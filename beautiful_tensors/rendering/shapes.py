@@ -17,8 +17,9 @@ def make_rectangle(stroke, height, width, stroke_width=1., deg=90):
     left, left_xy = stroke.sample(height, stroke_width=stroke_width)
     left = left.rotated(deg + 180, left.point(0.))
     left_xy = rotate_pts(top_xy, deg + 180, left.point(0.))
-    left = left.translated(complex(-stroke_width, height - (stroke_width / 2)))
-    left_xy += np.asarray([-stroke_width, height - (stroke_width / 2)])
+    pt = top.point(0) - left.point(.5) + complex(stroke_width / 2, stroke_width / 2)
+    left = left.translated(pt)
+    left_xy += np.asarray([pt.real, pt.imag])
     
     right, right_xy = stroke.sample(height, stroke_width=stroke_width)
     right = right.rotated(deg, right.point(0))
@@ -41,6 +42,19 @@ def make_rectangle(stroke, height, width, stroke_width=1., deg=90):
     
     return paths, xy
 
+
+# def make_cube(stroke, height, width, stroke_width=1., deg=135):
+#     (top_center, right_center, bottom_center, left_center), xy_center = make_rectangle(
+#         stroke, height, width, stroke_width=1., deg=90)
+#     (top_upper, right_upper, bottom_upper, left_upper), xy_upper = make_rectangle(
+#         stroke, height, width, stroke_width=1., deg=deg)
+#     pt = top_center.point(0) - left_upper.point(0)
+
+#     (top_side, right_side, bottom_side, left_side), xy_side = make_rectangle(
+#         stroke, height, width, stroke_width=1., deg=deg - 90)
+    
+
+
 class Shape(object):
     def __init__(self):
         self.c1, self.r1 = 0, 0
@@ -48,6 +62,7 @@ class Shape(object):
         self.stroke_xy = np.asarray([[]])
         self.boundary = None
         self.fill_paths = []
+        self.stroke_width = 1
 
     def rotate(self, deg):
         origin = self.stroke_paths[0].point(0.)
@@ -101,6 +116,80 @@ class Rectangle(Shape):
         self.boundary = path_from_pts(self.stroke_xy, close=True)
 
         self.fill_paths = self.fill.random_cropped(self.boundary)
+
+        self.translate((self.c1, self.r1))
+
+    def copy(self):
+        new = Rectangle(
+            self.height, self.width, top_left=(self.r1, self.c1),
+            stroke=self.stroke, stroke_width=self.stroke_width)
+        new.stroke_paths = [p for p in self.stroke_paths]
+        new.stroke_xy = self.stroke_xy.copy()
+        new.boundary = self.boundary
+        new.fill_paths = [p for p in self.fill_paths]
+        return new
+
+
+class Cube(Shape):
+    def __init__(self, height, width, top_left=(0, 0), deg=90, deg_top=135,
+                 fill='default', stroke='default', stroke_width=None):
+        super().__init__()
+        self.c1, self.r1 = [int(x) for x in top_left]
+        self.height = height
+        self.width = width
+        self.stroke_width = stroke_width
+        self.deg = deg
+        
+        self.stroke = stroke if stroke != 'default' else ImageStroke(DEFAULT_STROKE_FP)
+        self.fill = fill if fill != 'default' else PathFill(DEFAULT_FILL_FP)
+
+        (top_center, right_center, bottom_center, left_center), xy_center = make_rectangle(
+            self.stroke, height, width, stroke_width=stroke_width, deg=deg)
+        
+        (top_upper, right_upper, bottom_upper, left_upper), xy_upper = make_rectangle(
+            self.stroke, height, width, stroke_width=stroke_width, deg=deg_top)
+        pt = top_center.point(0) - left_upper.point(0) + complex(0, stroke_width / 2)
+        top_upper, right_upper, bottom_upper, left_upper = [
+            p.translated(pt) for p in [top_upper, right_upper, bottom_upper, left_upper]]
+        xy_upper += np.asarray([pt.real, pt.imag])
+        top_upper = top_upper.translated(complex(0, -stroke_width / 2))
+
+        (top_side, right_side, bottom_side, left_side), xy_side = make_rectangle(
+            self.stroke, height, width, stroke_width=stroke_width, deg=deg_top - 90)
+        top_side, right_side, bottom_side, left_side = [
+            p.rotated(90, left_side.point(0))
+            for p in [top_side, right_side, bottom_side, left_side]]
+        xy_side = rotate_pts(xy_side, 90, left_side.point(0))
+        pt = right_center.point(0) - left_side.point(0) + complex(-stroke_width / 2, 0)
+        top_side, right_side, bottom_side, left_side = [
+            p.translated(pt) for p in [top_side, right_side, bottom_side, left_side]]
+        xy_side += np.asarray([pt.real, pt.imag])
+        right_side = right_side.translated(complex(0, -stroke_width / 2))
+        
+
+        self.stroke_paths_center = [top_center, right_center, bottom_center, left_center]
+        self.stroke_xy_center = xy_center
+        self.boundary_center = path_from_pts(self.stroke_xy_center, close=True)
+        self.fill_paths_center = self.fill.random_cropped(self.boundary_center)
+
+        self.stroke_paths_upper = [top_upper, right_upper, left_upper]
+        self.stroke_xy_upper = xy_upper
+        self.boundary_upper = path_from_pts(self.stroke_xy_upper, close=True)
+        self.fill_paths_upper = self.fill.random_cropped(self.boundary_upper)
+
+        self.stroke_paths_side = [top_side, right_side]
+        self.stroke_xy_side = xy_side
+        self.boundary_side = path_from_pts(self.stroke_xy_side, close=True)
+        self.fill_paths_side = self.fill.random_cropped(self.boundary_side)
+
+        self.stroke_paths = [p for paths in [
+            self.stroke_paths_center, self.stroke_paths_upper, self.stroke_paths_side]
+                             for p in paths]
+        self.stroke_xy = np.concatenate((xy_center, xy_upper, xy_side))
+        self.boundary =  path_from_pts(self.stroke_xy, close=True)
+        self.fill_paths = [p for paths in [
+            self.fill_paths_center, self.fill_paths_upper, self.fill_paths_side]
+                           for p in paths]
 
         self.translate((self.c1, self.r1))
 
