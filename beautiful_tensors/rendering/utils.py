@@ -2,10 +2,14 @@ import math
 
 import numpy as np
 from IPython.display import SVG, display
-from svgpathtools import wsvg, Line, Path
+from svgpathtools import wsvg, Line, Path, svg2paths2
 
-def parse_path_from_svg(filepath):
-    pass
+def parse_paths_from_svg(filepath, scale=None):
+    paths, attributes, _ = svg2paths2(filepath)
+    if scale is not None:
+        paths = [p.scaled(scale) for p in paths]
+    return paths
+
 
 def get_half_circle(r, n=100, positive=True):
     pi = math.pi

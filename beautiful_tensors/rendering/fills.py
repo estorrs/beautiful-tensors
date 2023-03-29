@@ -2,7 +2,7 @@ import numpy as np
 from scipy.spatial import ConvexHull
 from svgpathtools import Line, Path
 
-from beautiful_tensors.rendering.utils import parse_path_from_svg, path_from_pts, show_svg
+from beautiful_tensors.rendering.utils import parse_paths_from_svg, path_from_pts, show_svg
 
 
 def extract_segments(obj, bounds):
@@ -20,7 +20,7 @@ def extract_segments(obj, bounds):
 class PathFill(object):
     def __init__(self, path):
         if isinstance(path, str):
-            self.path = parse_path_from_svg(path)
+            self.path = parse_paths_from_svg(path, scale=.02)[0]
         else:
             self.path = path
 

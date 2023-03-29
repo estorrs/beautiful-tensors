@@ -6,7 +6,7 @@ from beautiful_tensors.rendering.fills import PathFill
 from beautiful_tensors.rendering.utils import rotate_pts, path_from_pts
 
 DEFAULT_STROKE_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 4 (2).png'
-DEFAULT_FILL_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 4 (2).png'
+DEFAULT_FILL_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 5.svg'
 
 
 def make_rectangle(stroke, height, width, stroke_width=1., deg=90):
@@ -41,9 +41,52 @@ def make_rectangle(stroke, height, width, stroke_width=1., deg=90):
     
     return paths, xy
 
-class Rectangle(object):
+class Shape(object):
+    def __init__(self):
+        self.c1, self.r1 = 0, 0
+        self.stroke_paths = []
+        self.stroke_xy = np.asarray([[]])
+        self.boundary = None
+        self.fill_paths = []
+
+    def rotate(self, deg):
+        origin = self.stroke_paths[0].point(0.)
+        self.stroke_paths = [p.rotated(deg, origin) for p in self.stroke_paths]
+        self.fill_paths = [p.rotated(deg, origin) for p in self.fill_paths]
+        self.boundary = self.boundary.rotated(deg, origin)
+        self.stroke_xy = rotate_pts(self.stroke_xy, deg, origin=origin)
+
+    def translate(self, offset):
+        self.stroke_paths = [p.translated(complex(offset[0], offset[1])) for p in self.stroke_paths]
+        self.fill_paths = [p.translated(complex(offset[0], offset[1])) for p in self.fill_paths]
+        self.boundary = self.boundary.translated(complex(offset[0], offset[1]))
+        self.stroke_xy += np.asarray(offset)
+
+    def to_renderable(self,
+               fill_stroke_width=None, fill_color='#80a2bd',
+               stroke_stroke_width=None, stroke_fill_color='#7e807f',
+               stroke_stroke_color='#7e807f'):
+        fill_stroke_width = fill_stroke_width if fill_stroke_width is not None else self.stroke_width / 4
+        stroke_stroke_width = stroke_stroke_width if stroke_stroke_width is not None else self.stroke_width / 12
+
+        paths, attbs = [], []
+        paths += self.fill_paths
+        attbs += [{
+            'stroke': fill_color, 'stroke-width': fill_stroke_width, 'fill': 'none'
+        }] * len(self.fill_paths)
+
+        paths += self.stroke_paths
+        attbs += [{
+            'stroke': stroke_stroke_color, 'stroke-width': stroke_stroke_width, 'fill': stroke_fill_color
+        }] * len(self.stroke_paths)
+
+        return paths, attbs
+
+
+class Rectangle(Shape):
     def __init__(self, height, width, top_left=(0, 0), deg=90,
                  fill='default', stroke='default', stroke_width=None):
+        super().__init__()
         self.c1, self.r1 = [int(x) for x in top_left]
         self.height = height
         self.width = width
@@ -70,38 +113,3 @@ class Rectangle(object):
         new.boundary = self.boundary
         new.fill_paths = [p for p in self.fill_paths]
         return new
-
-    def rotate(self, deg):
-        origin = self.stroke_paths[0].point(0.)
-        self.stroke_paths = [p.rotated(deg, origin) for p in self.stroke_paths]
-        self.fill_paths = [p.rotated(deg, origin) for p in self.fill_paths]
-        self.boundary = self.boundary.rotated(deg, origin)
-        self.stroke_xy = rotate_pts(self.stroke_xy, deg, origin=origin)
-
-    def translate(self, offset):
-        self.stroke_paths = [p.translated(complex(offset[0], offset[1])) for p in self.stroke_paths]
-        self.fill_paths = [p.translated(complex(offset[0], offset[1])) for p in self.fill_paths]
-        self.boundary = self.boundary.translated(complex(offset[0], offset[1]))
-        self.stroke_xy += np.asarray(offset)
-
-    def to_renderable(self,
-               fill_stroke_width=None, fill_color='#80a2bd',
-               stroke_stroke_width=None, stroke_fill_color='#7e807f',
-               stroke_stroke_color='#7e807f'):
-        fill_stroke_width = fill_stroke_width if fill_stroke_width is not None else self.stroke_width / 2
-        stroke_stroke_width = stroke_stroke_width if stroke_stroke_width is not None else self.stroke_width / 10
-
-        paths, attbs = [], []
-        paths += self.fill_paths
-        attbs += [{
-            'stroke': fill_color, 'stroke-width': fill_stroke_width
-        }] * len(self.fill_paths)
-
-        paths += self.stroke_paths
-        attbs += [{
-            'stroke': stroke_stroke_color, 'stroke-width': stroke_stroke_width, 'fill': stroke_fill_color
-        }] * len(self.fill_paths)
-
-        return paths, attbs
-
-
