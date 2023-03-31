@@ -1,12 +1,18 @@
+import uuid
+import xml.etree.ElementTree as ET
+
 import numpy as np
 from svgpathtools import Path, Line
 
 from beautiful_tensors.rendering.strokes import ImageStroke
 from beautiful_tensors.rendering.fills import PathFill
-from beautiful_tensors.rendering.utils import rotate_pts, path_from_pts
+from beautiful_tensors.rendering.utils import rotate_pts, path_from_pts, flatten_paths
 
 DEFAULT_STROKE_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 4 (2).png'
 DEFAULT_FILL_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 5.svg'
+
+DEFAULT_STROKE = ImageStroke(DEFAULT_STROKE_FP)
+DEFAULT_FILL = PathFill(DEFAULT_FILL_FP)
 
 
 def make_rectangle(stroke, height, width, stroke_width=1., deg=90):
@@ -43,20 +49,9 @@ def make_rectangle(stroke, height, width, stroke_width=1., deg=90):
     return paths, xy
 
 
-# def make_cube(stroke, height, width, stroke_width=1., deg=135):
-#     (top_center, right_center, bottom_center, left_center), xy_center = make_rectangle(
-#         stroke, height, width, stroke_width=1., deg=90)
-#     (top_upper, right_upper, bottom_upper, left_upper), xy_upper = make_rectangle(
-#         stroke, height, width, stroke_width=1., deg=deg)
-#     pt = top_center.point(0) - left_upper.point(0)
-
-#     (top_side, right_side, bottom_side, left_side), xy_side = make_rectangle(
-#         stroke, height, width, stroke_width=1., deg=deg - 90)
-    
-
-
 class Shape(object):
     def __init__(self):
+        self.id = str(uuid.uuid4())
         self.c1, self.r1 = 0, 0
         self.stroke_paths = []
         self.stroke_xy = np.asarray([[]])
@@ -72,13 +67,16 @@ class Shape(object):
         self.stroke_xy = rotate_pts(self.stroke_xy, deg, origin=origin)
 
     def translate(self, offset):
+        if isinstance(offset, complex) or isinstance(offset, np.complex128):
+            offset = (offset.real, offset.imag)
         self.stroke_paths = [p.translated(complex(offset[0], offset[1])) for p in self.stroke_paths]
         self.fill_paths = [p.translated(complex(offset[0], offset[1])) for p in self.fill_paths]
         self.boundary = self.boundary.translated(complex(offset[0], offset[1]))
         self.stroke_xy += np.asarray(offset)
 
     def to_renderable(self,
-               fill_stroke_width=None, fill_color='#80a2bd',
+               fill_stroke_width=None, fill_stroke_color='#80a2bd',
+               fill_fill_color='none',
                stroke_stroke_width=None, stroke_fill_color='#7e807f',
                stroke_stroke_color='#7e807f'):
         fill_stroke_width = fill_stroke_width if fill_stroke_width is not None else self.stroke_width / 4
@@ -87,7 +85,7 @@ class Shape(object):
         paths, attbs = [], []
         paths += self.fill_paths
         attbs += [{
-            'stroke': fill_color, 'stroke-width': fill_stroke_width, 'fill': 'none'
+            'stroke': fill_stroke_color, 'stroke-width': fill_stroke_width, 'fill': fill_fill_color
         }] * len(self.fill_paths)
 
         paths += self.stroke_paths
@@ -96,6 +94,31 @@ class Shape(object):
         }] * len(self.stroke_paths)
 
         return paths, attbs
+    
+    def to_xml(self, as_string=False,
+               fill_stroke_width=None, fill_stroke_color='#80a2bd',
+               fill_fill_color='none',
+               stroke_stroke_width=None, stroke_fill_color='#7e807f',
+               stroke_stroke_color='#7e807f', opacity=1.):
+        paths, attbs = self.to_renderable(
+            fill_stroke_width=fill_stroke_width, fill_stroke_color=fill_stroke_color,
+            fill_fill_color=fill_fill_color, stroke_stroke_width=stroke_stroke_width,
+            stroke_fill_color=stroke_fill_color, stroke_stroke_color=stroke_stroke_color)
+    
+        g = ET.Element('g')
+        g.set('id', self.id)
+        g.set('opacity', str(opacity))
+        
+        for p, a in zip(paths, attbs):
+            path = ET.SubElement(g, 'path')
+            for k, v in a.items():
+                path.set(k, str(v))
+            path.set('d', p.d())
+        
+        if as_string:
+            return ET.tostring(g).decode('utf-8')
+
+        return g        
 
 
 class Rectangle(Shape):
@@ -107,15 +130,14 @@ class Rectangle(Shape):
         self.width = width
         self.stroke_width = stroke_width
         self.deg = deg
-        
-        self.stroke = stroke if stroke != 'default' else ImageStroke(DEFAULT_STROKE_FP)
-        self.fill = fill if fill != 'default' else PathFill(DEFAULT_FILL_FP)
+        self.stroke = stroke if stroke != 'default' else DEFAULT_STROKE
+        self.fill = fill if fill != 'default' else DEFAULT_FILL
         
         self.stroke_paths, self.stroke_xy = make_rectangle(
             self.stroke, height, width, stroke_width=stroke_width, deg=deg)
         self.boundary = path_from_pts(self.stroke_xy, close=True)
 
-        self.fill_paths = self.fill.random_cropped(self.boundary)
+        self.fill_paths = self.fill.sample(self.boundary)
 
         self.translate((self.c1, self.r1))
 
@@ -140,8 +162,8 @@ class Cube(Shape):
         self.stroke_width = stroke_width
         self.deg = deg
         
-        self.stroke = stroke if stroke != 'default' else ImageStroke(DEFAULT_STROKE_FP)
-        self.fill = fill if fill != 'default' else PathFill(DEFAULT_FILL_FP)
+        self.stroke = stroke if stroke != 'default' else DEFAULT_STROKE
+        self.fill = fill if fill != 'default' else DEFAULT_FILL
 
         (top_center, right_center, bottom_center, left_center), xy_center = make_rectangle(
             self.stroke, height, width, stroke_width=stroke_width, deg=deg)
@@ -170,26 +192,28 @@ class Cube(Shape):
         self.stroke_paths_center = [top_center, right_center, bottom_center, left_center]
         self.stroke_xy_center = xy_center
         self.boundary_center = path_from_pts(self.stroke_xy_center, close=True)
-        self.fill_paths_center = self.fill.random_cropped(self.boundary_center)
+        self.fill_paths_center = self.fill.sample(self.boundary_center)
+        # print(len(self.fill_paths_center))
+        # print(len(self.boundary_center), self.boundary_center)
 
         self.stroke_paths_upper = [top_upper, right_upper, left_upper]
         self.stroke_xy_upper = xy_upper
         self.boundary_upper = path_from_pts(self.stroke_xy_upper, close=True)
-        self.fill_paths_upper = self.fill.random_cropped(self.boundary_upper)
+        self.fill_paths_upper = self.fill.sample(self.boundary_upper)
 
         self.stroke_paths_side = [top_side, right_side]
         self.stroke_xy_side = xy_side
         self.boundary_side = path_from_pts(self.stroke_xy_side, close=True)
-        self.fill_paths_side = self.fill.random_cropped(self.boundary_side)
+        self.fill_paths_side = self.fill.sample(self.boundary_side)
 
-        self.stroke_paths = [p for paths in [
-            self.stroke_paths_center, self.stroke_paths_upper, self.stroke_paths_side]
-                             for p in paths]
+        self.stroke_paths = flatten_paths([
+            self.stroke_paths_center, self.stroke_paths_upper, self.stroke_paths_side
+        ])
         self.stroke_xy = np.concatenate((xy_center, xy_upper, xy_side))
         self.boundary =  path_from_pts(self.stroke_xy, close=True)
-        self.fill_paths = [p for paths in [
-            self.fill_paths_center, self.fill_paths_upper, self.fill_paths_side]
-                           for p in paths]
+        self.fill_paths = flatten_paths([
+            self.fill_paths_center, self.fill_paths_upper, self.fill_paths_side
+        ])
 
         self.translate((self.c1, self.r1))
 

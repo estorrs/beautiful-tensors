@@ -6,7 +6,7 @@ from beautiful_tensors.rendering.utils import parse_paths_from_svg, path_from_pt
 
 
 def extract_segments(obj, bounds):
-    intersections = obj.intersect(bounds)
+    intersections = obj.intersect(bounds) # would be great to find a way to speed this up
     locations = sorted([t[0][0] for t in intersections])
 
     segments = []
@@ -30,7 +30,7 @@ class PathFill(object):
 
         return extract_segments(self.path, bounds)
 
-    def random_cropped(self, bounds, sample_size=1000):
+    def sample(self, bounds, sample_size=1000):
         """
         A random crop for anywhere inside the fill path that is valid for the given bounds
         """
@@ -40,7 +40,6 @@ class PathFill(object):
         x1, x2, y1, y2 = bounds.bbox()
         x, y = (x2 - x1) / 2, (y2 - y1) / 2
         bounds = bounds.translated(complex(-x - x1, -y - y1))
-
         path_pts = [self.path.point(t) for t in np.random.rand(sample_size)]
         path_xy = np.asarray([[pt.real, pt.imag] for pt in path_pts])
         hull = ConvexHull(path_xy)
@@ -60,8 +59,20 @@ class PathFill(object):
             raise RuntimeError('no valid cropping windows found')
 
         segments = extract_segments(self.path, crop_bounds)
+
         # recenter
         segments = [s.translated(complex(x + x1, y + y1)) for s in segments]
         # relocation pt
         segments = [s.translated(-relocation_pt) for s in segments]
+
         return segments
+
+class SolidFill(object):
+    def __init__(self):
+        pass
+
+    def sample(self, bounds):
+        """
+        return path that fills bounds
+        """
+        return bounds

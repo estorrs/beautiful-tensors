@@ -23,7 +23,7 @@ def get_half_circle(r, n=100, positive=True):
 
 
 def show_svg(paths, colors=None, attributes=None, filename='test.svg'):
-    wsvg(paths, colors=colors, attributes=attributes, filename=filename)
+    wsvg(flatten_paths(paths), colors=colors, attributes=attributes, filename=filename)
     display(SVG(filename=filename))
 
 
@@ -51,3 +51,21 @@ def rotate_pts(xy, deg, origin=None):
     coords = [[lines[0].start.real, lines[0].start.imag]]
     coords += [[l.end.real, l.end.imag] for l in lines]
     return np.asarray(coords)
+
+
+def flatten_paths(nested_paths, flattened=None):
+    """Definitely a more elegant way to do this, but it works for now."""
+    if flattened is None:
+        flattened = []
+        initial = True
+    else:
+        initial = False
+
+    if not isinstance(nested_paths, list):
+        flattened.append(nested_paths)
+    else:
+        for p in nested_paths:
+            flatten_paths(p, flattened=flattened)
+        
+    if initial:
+        return flattened
