@@ -19,7 +19,7 @@ def get_half_circle(r, n=100, positive=True):
         result[:, 0] *= -1.
         result = np.flip(result, axis=0)
     
-    return result[:, [1, 0]]
+    return result
 
 
 def show_svg(paths, colors=None, attributes=None, filename='test.svg'):

@@ -14,6 +14,7 @@ from beautiful_tensors.rendering.utils import get_half_circle
 
 
 DEFAULT_STROKE_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 4 (2).png'
+DEFAULT_DISTANCES = (.2, .5)
 
 def read_line(fp, pad=20, background=254):
     img = read_image(fp)
@@ -61,46 +62,62 @@ def get_cap(arr, positive=True):
         min_h = arr[0, 0]
         max_h = arr[0, 2]
     r = (max_h - min_h) / 2.
+    print(r)
     cap = get_half_circle(r, positive=positive)
     cap[:, 0] += np.asarray([min_h + r] * cap.shape[0])
     return cap
 
+def get_cap_simple(top_xy, bottom_xy, positive=True):
+    if positive:
+        top_pt = top_xy[-1]
+        bottom_pt = bottom_xy[0]
+    else:
+        top_pt = top_xy[0]
+        bottom_pt = bottom_xy[-1]
+    min_h = top_pt[1]
+    max_h = bottom_pt[1]
+    r = (max_h - min_h) / 2.
+    cap = get_half_circle(r, positive=positive)
+    cap[:, 0] += top_pt[0]
+    cap[:, 1] += min_h + r
+    return cap
 
-def convert_to_obj_pts(pts, start=None, stop=None, length=None, height=None, center=True):
+def rescale_x(xy, w, length):
+    xy[:, 0] /= w
+    xy[:, 0] *= length
+    return xy
+
+def rescale_y(xy, h, height):
+    xy[:, 1] /= h
+    xy[:, 1] *= height
+    return xy
+
+
+def convert_to_obj_pts(pts, start=None, stop=None, length=10., height=1., center=True):
     start = start if start is not None else 0
     stop = stop if stop is not None else pts.shape[0]
     size = stop - start
 
-    xy = [[i - start, pts[i, 0]] for i in range(start, stop, 1)]
-    cap = get_cap(pts[start:stop], positive=True)
-    xy += [[x + size, y] for y, x in cap]
-
+    top = np.asarray([[i - start, pts[i, 0]] for i in range(start, stop, 1)])
     midline = np.asarray([[i - start, pts[i, 1]] for i in range(start, stop, 1)])
+    bottom = np.asarray([[i - start, pts[i, 2]] for i in range(stop - 1, start - 1, -1)])
 
-    xy += [[i - start, pts[i, 2]] for i in range(stop - 1, start - 1, -1)]
-    cap = get_cap(pts[start:stop], positive=False)
-    xy += [[x, y] for y, x in cap]
-
-    xy = np.asarray(xy)
-
-    w, h = xy.max(0) - xy.min(0)
+    collected = np.concatenate((top, bottom), axis=0)
+    w, h = collected.max(0) - collected.min(0)
     ratio = h / w
+    height = ratio * length if height is None else height
+
     if length is not None:
-        xy[:, 0] /= w
-        xy[:, 0] *= length
+        top, bottom, midline = [rescale_x(pts, w, length) for pts in [top, bottom, midline]]
+        top, bottom, midline = [rescale_y(pts, h, height) for pts in [top, bottom, midline]]
 
-        midline[:, 0] /= w
-        midline[:, 0] *= length
+    cap_right = np.asarray(get_cap_simple(top, bottom, positive=True))
 
-        xy[:, 1] /= h
-        midline[:, 1] /= h
-        if height is None:
-            xy[:, 1] *= ratio * length
-            midline[:, 1] *= ratio * length
-        else:
-            xy[:, 1] *= height
-            midline[:, 1] *= height
- 
+    cap_left = np.asarray(get_cap_simple(top, bottom, positive=False))
+
+    # plt.axis('equal')
+    xy = np.concatenate((top, cap_right, bottom, cap_left), axis=0)
+    # plt.scatter(xy[100:170, 0], xy[100:170, 1])
     if center:
         idxs = np.where(xy[:, 0] == 0)[0]
         assert len(idxs)==2
