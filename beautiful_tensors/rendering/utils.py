@@ -11,6 +11,16 @@ def parse_paths_from_svg(filepath, scale=None):
     return paths
 
 
+def get_arc(r, n=100, start=180, stop=360):
+    pi = math.pi
+    x1, x2 = start / 360., stop / 360.
+    # x1, x2 = .5, 1.
+    s1, s2 = int(x1 * n), int(x2 * n)
+    result = np.asarray([[math.cos(2*pi/n*x)*r, math.sin(2*pi/n*x)*r] for x in range(s1, s2)])
+
+    return result
+
+
 def get_half_circle(r, n=100, positive=True):
     pi = math.pi
     s1, s2 = (n // 4), (n // 4) * 3
@@ -69,3 +79,9 @@ def flatten_paths(nested_paths, flattened=None):
         
     if initial:
         return flattened
+    
+
+def respace_pts(xy, n):
+    path = path_from_pts(xy)
+    return np.asarray([[path.point(x).real, path.point(x).imag]
+                       for x in np.linspace(0, 1, n)])

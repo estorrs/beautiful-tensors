@@ -126,7 +126,7 @@ def convert_to_obj_pts(pts, start=None, stop=None, length=10., height=1., center
         xy[:, 1] -= y_center
         midline[:, 1] -= y_center
   
-    return xy, midline
+    return xy, top, midline, bottom
 
 
 class ImageStroke(object):
@@ -148,19 +148,31 @@ class ImageStroke(object):
     
     def get_path(self, start=None, stop=None, length=1., height=None, flip=False):
         start, stop = int(start * self.pts.shape[0]), int(stop * self.pts.shape[0])
-        xy, midline = self.__get_obj_pts(start, stop, length=length, height=height, flip=flip)
+        xy, top, midline, bottom = self.__get_obj_pts(start, stop, length=length, height=height, flip=flip)
         lines = [Line(complex(xy[i, 0], xy[i, 1]), complex(xy[i+1, 0], xy[i+1, 1]))
                  for i in range(len(xy) - 1)]
         line_obj = Path(*lines)
 
-        return line_obj, midline
+        return line_obj, top, midline, bottom
 
-    def sample(self, length, stroke_width=None, distances=(.2, .5), allow_flip=True):
+    def sample(self, length, stroke_width=None, distances=(.2, .5), allow_flip=True, return_all=False):
         distance = np.random.randint(
             int(distances[0] * 100), int(distances[1] * 100), 1)[0] / 100
         start_max = .9999 - distance
         start = np.random.randint(0, int(start_max * 100), 1)[0] / 100
         stop = start + distance
         flip = np.random.rand() < .5 if allow_flip else False
-        return self.get_path(
+        line_obj, top, midline, bottom = self.get_path(
             start=start, stop=stop, length=length, height=stroke_width, flip=flip)
+        if return_all:
+            return line_obj, top, midline, bottom
+        return line_obj, midline
+    
+    def fit_to_pts(self, xy, length, stroke_width=None, distances=(.2, .5), allow_flip=True):
+        _, top, midline, bottom = self.sample(
+            length, stroke_width=stroke_width, distances=distances, allow_flip=allow_flip,
+            return_all=True)
+        
+
+        
+
