@@ -106,18 +106,14 @@ def path_from_pts(xy, close=False):
 
 
 def rotate_pts(xy, deg, origin=None):
-    lines = []
-    for i in range(xy.shape[0] - 1):
-        x1, y1 = xy[i]
-        x2, y2 = xy[i + 1]
-        line = Line(complex(x1, y1), complex(x2, y2))
-        lines.append(line)
+    lines = path_from_pts(xy)
     lines = Path(*lines)
     lines = lines.rotated(deg, lines.point(0.) if origin is None else origin)
-    
+
     coords = [[lines[0].start.real, lines[0].start.imag]]
     coords += [[l.end.real, l.end.imag] for l in lines]
-    return np.asarray(coords)
+    coords = np.asarray(coords)
+    return coords
 
 
 def flatten_paths(nested_paths, flattened=None):

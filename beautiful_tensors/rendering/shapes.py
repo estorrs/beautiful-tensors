@@ -2,12 +2,13 @@ import uuid
 import xml.etree.ElementTree as ET
 
 import numpy as np
+import matplotlib.pyplot as plt
 from svgpathtools import Path, Line
 
 from beautiful_tensors.rendering.strokes import ImageStroke, DEFAULT_DISTANCES
 from beautiful_tensors.rendering.fills import PathFill
-from beautiful_tensors.rendering.text import Text
-from beautiful_tensors.rendering.utils import rotate_pts, path_from_pts, flatten_paths, get_bezier_arc
+from beautiful_tensors.rendering.text import Text, get_square_text, get_cube_text
+from beautiful_tensors.rendering.utils import rotate_pts, path_from_pts, flatten_paths, get_bezier_arc, show_svg
 
 DEFAULT_STROKE_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 4 (2).png'
 DEFAULT_FILL_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 5.svg'
@@ -22,7 +23,7 @@ def make_rectangle(stroke, height, width, stroke_width=1., deg=90):
     left, left_xy = stroke.sample(height, stroke_width=stroke_width)
     origin = complex(*left_xy[0])
     left = left.rotated(deg + 180, origin)
-    left_xy = rotate_pts(top_xy, deg + 180, origin)
+    left_xy = rotate_pts(left_xy, deg + 180, origin)
     
     right, right_xy = stroke.sample(height, stroke_width=stroke_width)
     origin = complex(*right_xy[0])
@@ -175,8 +176,6 @@ class Shape(object):
             'stroke': stroke_stroke_color, 'stroke-width': stroke_stroke_width, 'fill': stroke_fill_color
         }] * len(self.stroke_paths)
 
-        
-
         return paths, attbs
     
     def to_xml(self, as_string=False,
@@ -198,6 +197,10 @@ class Shape(object):
             for k, v in a.items():
                 path.set(k, str(v))
             path.set('d', p.d())
+
+        for t in self.texts:
+            child = t.to_xml()
+            g.append(child)
         
         if as_string:
             return ET.tostring(g).decode('utf-8')
@@ -220,31 +223,11 @@ class Rectangle(Shape):
         self.stroke = stroke if stroke != 'default' else DEFAULT_STROKE
         self.fill = fill if fill != 'default' else DEFAULT_FILL
 
-        self.texts = []
-        if center_text is not None:
-            font_size = int(center_text_scale * height)
-            self.texts.append(Text(
-                center_text, complex(width / 2, height / 2),
-                font_size=font_size, tag='center_text'))
-        if bottom_text is not None:
-            font_size = int(bottom_text_scale * height)
-            pad = font_size / 2
-            self.texts.append(Text(
-                bottom_text, complex(width / 2, height + pad),
-                font_size=font_size, tag='bottom_text'))
-        if left_text is not None:
-            font_size = int(side_text_scale * height)
-            pad = font_size / 2
-            self.texts.append(Text(
-                left_text, complex(-pad, height / 2),
-                font_size=font_size, tag='left_text',
-                rotation=90 if rotate_left_text else 0))
-        if top_text is not None:
-            font_size = int(side_text_scale * height)
-            pad = font_size / 2
-            self.texts.append(Text(
-                top_text, complex(width / 2, -pad),
-                font_size=font_size, tag='top_text'))
+        self.texts = get_square_text(
+            height, width,
+            center_text=center_text, bottom_text=bottom_text, left_text=left_text, top_text=top_text,
+            center_text_scale=center_text_scale, bottom_text_scale=bottom_text_scale, side_text_scale=side_text_scale,
+            padding=stroke_width, rotate_left_text=rotate_left_text)
 
         self.stroke_paths, self.stroke_xy = make_rectangle(
             self.stroke, height, width, stroke_width=stroke_width, deg=deg)
@@ -257,7 +240,10 @@ class Rectangle(Shape):
 
 class RoundedRectangle(Shape):
     def __init__(self, height, width, top_left=(0, 0), radius=None,
-                 fill='default', stroke='default', stroke_width=None):
+                 fill='default', stroke='default', stroke_width=None,
+                 center_text=None, left_text=None, top_text=None, bottom_text=None,
+                 center_text_scale=.2, side_text_scale=.1, bottom_text_scale=.2,
+                 rotate_left_text=True):
         super().__init__()
         self.c1, self.r1 = [int(x) for x in top_left]
         self.height = height
@@ -266,6 +252,12 @@ class RoundedRectangle(Shape):
         self.radius = radius
         self.stroke = stroke if stroke != 'default' else DEFAULT_STROKE
         self.fill = fill if fill != 'default' else DEFAULT_FILL
+
+        self.texts = get_square_text(
+            height, width,
+            center_text=center_text, bottom_text=bottom_text, left_text=left_text, top_text=top_text,
+            center_text_scale=center_text_scale, bottom_text_scale=bottom_text_scale, side_text_scale=side_text_scale,
+            padding=stroke_width, rotate_left_text=rotate_left_text)
         
         self.stroke_paths, self.stroke_xy = make_rounded_rectangle(
             self.stroke, height, width, stroke_width=stroke_width, radius=radius)
@@ -278,8 +270,11 @@ class RoundedRectangle(Shape):
 
 
 class Cube(Shape):
-    def __init__(self, height, width, top_left=(0, 0), deg=90, deg_top=135,
-                 depth=None, fill='default', stroke='default', stroke_width=None):
+    def __init__(self, height, width, depth, top_left=(0, 0), deg=90, deg_top=135,
+                fill='default', stroke='default', stroke_width=None,
+                 center_text=None, left_text=None, top_text=None, bottom_text=None, depth_text=None,
+                 center_text_scale=.2, side_text_scale=.1, bottom_text_scale=.2,
+                 rotate_left_text=True, rotate_depth_text=True):
         super().__init__()
         self.c1, self.r1 = [int(x) for x in top_left]
         self.height = height
@@ -295,14 +290,14 @@ class Cube(Shape):
             self.stroke, height, width, stroke_width=stroke_width, deg=deg)
         
         (top_upper, right_upper, bottom_upper, left_upper), xy_upper = make_rectangle(
-            self.stroke, height, width, stroke_width=stroke_width, deg=deg_top)
+            self.stroke, depth, width, stroke_width=stroke_width, deg=deg_top)
         pt = top_center.point(0) - left_upper.point(0)
         top_upper, right_upper, bottom_upper, left_upper = [
             p.translated(pt) for p in [top_upper, right_upper, bottom_upper, left_upper]]
         xy_upper += np.asarray([pt.real, pt.imag])
 
         (top_side, right_side, bottom_side, left_side), xy_side = make_rectangle(
-            self.stroke, height, width, stroke_width=stroke_width, deg=deg_top - 90)
+            self.stroke, depth, height, stroke_width=stroke_width, deg=deg_top - 90)
         top_side, right_side, bottom_side, left_side = [
             p.rotated(90, left_side.point(0))
             for p in [top_side, right_side, bottom_side, left_side]]
@@ -310,7 +305,7 @@ class Cube(Shape):
         pt = right_center.point(0) - left_side.point(0) + complex(-stroke_width / 2, -stroke_width / 2)
         top_side, right_side, bottom_side, left_side = [
             p.translated(pt) for p in [top_side, right_side, bottom_side, left_side]]
-        xy_side += np.asarray([pt.real, pt.imag])        
+        xy_side += np.asarray([pt.real, pt.imag])      
 
         self.stroke_paths_center = [top_center, right_center, bottom_center, left_center]
         self.stroke_xy_center = xy_center
@@ -326,6 +321,18 @@ class Cube(Shape):
         self.stroke_xy_side = xy_side
         self.boundary_side = path_from_pts(self.stroke_xy_side, close=True)
         self.fill_paths_side = self.fill.sample(self.boundary_side)
+
+        # get depth text location
+        pt = left_upper.point(.25)
+        depth_normal = -left_upper.normal(.25)
+        self.texts = get_cube_text(
+            height, width,
+            center_text=center_text, bottom_text=bottom_text, left_text=left_text, top_text=top_text,
+            center_text_scale=center_text_scale, bottom_text_scale=bottom_text_scale, side_text_scale=side_text_scale,
+            padding=stroke_width, rotate_left_text=rotate_left_text,
+            depth_text=depth_text, depth_pt=pt, depth_normal=depth_normal, rotate_depth_text=rotate_depth_text
+            )
+
 
         self.stroke_paths = flatten_paths([
             self.stroke_paths_center, self.stroke_paths_upper, self.stroke_paths_side
