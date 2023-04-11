@@ -2,7 +2,7 @@ import math
 
 import numpy as np
 from IPython.display import SVG, display
-from svgpathtools import wsvg, Line, Path, svg2paths2
+from svgpathtools import wsvg, Line, Path, svg2paths2, CubicBezier
 
 def parse_paths_from_svg(filepath, scale=None):
     paths, attributes, _ = svg2paths2(filepath)
@@ -19,6 +19,63 @@ def get_arc(r, n=100, start=180, stop=360):
     result = np.asarray([[math.cos(2*pi/n*x)*r, math.sin(2*pi/n*x)*r] for x in range(s1, s2)])
 
     return result
+
+
+def get_bezier_arc(start, stop, center, as_pts=False, fidelity=100):
+    """
+    given the start and end points of the arc ([x1, y1] and [x4, y4], respectively) and the the center of the circle
+    ([xc, yc]), one can derive the control points for a cubic Bézier curve ([x2, y2] and [x3, y3]) as follows:
+    """
+    if not isinstance(start, np.complex128) and not isinstance(start, complex):
+        start, stop, center = complex(*start), complex(*stop), complex(*center)
+
+    x1, y1 = start.real, start.imag
+    x4, y4 = stop.real, stop.imag
+    xc, yc = center.real, center.imag
+    
+    ax = x1 - xc
+    ay = y1 - yc
+    bx = x4 - xc
+    by = y4 - yc
+    q1 = ax * ax + ay * ay
+    q2 = q1 + ax * bx + ay * by
+    k2 = (4/3) * (np.sqrt(2 * q1 * q2) - q2) / (ax * by - ay * bx)
+
+    x2 = xc + ax - k2 * ay
+    y2 = yc + ay + k2 * ax
+    x3 = xc + bx + k2 * by                                 
+    y3 = yc + by - k2 * bx
+    
+    arc = CubicBezier(start, complex(x2, y2), complex(x3, y3), stop)
+
+    if as_pts:
+        return np.asarray([[arc.point(x).real, arc.point(x).imag] for x in np.linspace(0, 1, fidelity)])
+    
+    return arc
+
+def get_bezier_half_circle(start, stop, center, positive=True, as_pts=False, fidelity=100):
+    if not isinstance(start, np.complex128) and not isinstance(start, complex):
+        start, stop, center = complex(*start), complex(*stop), complex(*center)
+
+    delta = Line(start, center)
+    mag = delta.length()
+    direction = delta.normal(.5) * mag
+    if not positive:
+        direction = -direction
+    
+    mid = center + direction
+
+    a1 = get_bezier_arc(start, mid, center)
+    a2 = get_bezier_arc(mid, stop, center)
+
+    arc = Path(a1, a2)
+
+    if as_pts:
+        return np.asarray([[arc.point(x).real, arc.point(x).imag] for x in np.linspace(0, 1, fidelity)])
+
+    return arc
+    
+
 
 
 def get_half_circle(r, n=100, positive=True):

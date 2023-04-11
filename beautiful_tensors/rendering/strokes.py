@@ -1,4 +1,5 @@
 import os
+import math
 from math import factorial
 
 import matplotlib.pyplot as plt
@@ -10,7 +11,7 @@ from scipy.signal import savgol_filter
 from svgpathtools import svg2paths2, Path, polynomial2bezier, QuadraticBezier, CubicBezier, wsvg, Line
 from torchvision.io.image import read_image
 
-from beautiful_tensors.rendering.utils import get_half_circle
+from beautiful_tensors.rendering.utils import get_half_circle, get_arc, path_from_pts, show_svg, get_bezier_arc, get_bezier_half_circle
 
 
 DEFAULT_STROKE_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 4 (2).png'
@@ -125,6 +126,8 @@ def convert_to_obj_pts(pts, start=None, stop=None, length=10., height=1., center
         y_center = abs((v1 - v2) / 2.) + min(v1, v2)
         xy[:, 1] -= y_center
         midline[:, 1] -= y_center
+        top[:, 1] -= y_center
+        bottom[:, 1] -= y_center
   
     return xy, top, midline, bottom
 
@@ -148,14 +151,16 @@ class ImageStroke(object):
     
     def get_path(self, start=None, stop=None, length=1., height=None, flip=False):
         start, stop = int(start * self.pts.shape[0]), int(stop * self.pts.shape[0])
-        xy, top, midline, bottom = self.__get_obj_pts(start, stop, length=length, height=height, flip=flip)
+        xy, top, midline, bottom = self.__get_obj_pts(
+            start, stop, length=length, height=height, flip=flip)
         lines = [Line(complex(xy[i, 0], xy[i, 1]), complex(xy[i+1, 0], xy[i+1, 1]))
                  for i in range(len(xy) - 1)]
         line_obj = Path(*lines)
 
         return line_obj, top, midline, bottom
 
-    def sample(self, length, stroke_width=None, distances=(.2, .5), allow_flip=True, return_all=False):
+    def sample(self, length, stroke_width=None, distances=(.2, .5),
+               allow_flip=True, return_all=False):
         distance = np.random.randint(
             int(distances[0] * 100), int(distances[1] * 100), 1)[0] / 100
         start_max = .9999 - distance
@@ -168,11 +173,53 @@ class ImageStroke(object):
             return line_obj, top, midline, bottom
         return line_obj, midline
     
-    def fit_to_pts(self, xy, length, stroke_width=None, distances=(.2, .5), allow_flip=True):
-        _, top, midline, bottom = self.sample(
+    def fit_to_path(self, path, length=None, stroke_width=None, distances=(.2, .5),
+                    allow_flip=True, n=200):
+        if length is None:
+            length = path.length()
+        _, top_xy, midline_xy, bottom_xy = self.sample(
             length, stroke_width=stroke_width, distances=distances, allow_flip=allow_flip,
             return_all=True)
+        top_path = path_from_pts(top_xy)
+        midline_path = path_from_pts(midline_xy)
+        bottom_path = path_from_pts(bottom_xy)
+
+        # show_svg([top_path, midline_path, bottom_path], colors=['red', 'blue', 'green'])
+
+        r_top_xy, r_midline_xy, r_bottom_xy = [], [], []
+        for dist in np.linspace(0, 1, n):
+            path_pt = path.point(dist)
+            left_dist = abs((top_path.point(dist) - midline_path.point(dist)).imag)
+            # right_dist = abs((bottom_path.point(dist) - midline_path.point(dist)).imag)
+            right_dist = left_dist # just assume sym
+            
+            right_pt = path.normal(dist) * right_dist
+            left_pt = -path.normal(dist) * left_dist
+            
+            right_pt += path_pt
+            left_pt += path_pt
+            
+            r_top_xy.append([left_pt.real, left_pt.imag])
+            r_midline_xy.append([path_pt.real, path_pt.imag])
+            r_bottom_xy.append([right_pt.real, right_pt.imag])
+        r_top_xy, r_midline_xy, r_bottom_xy = (
+            np.asarray(r_top_xy), np.asarray(r_midline_xy), np.asarray(r_bottom_xy))
+        r_bottom_xy = np.flip(r_bottom_xy, axis=0)
+
+
+        center = complex(*r_top_xy[0]) - (complex(*r_top_xy[0] - r_bottom_xy[-1]) / 2)
+        start_cap = get_bezier_half_circle(
+            complex(*r_bottom_xy[-1]), complex(*r_top_xy[0]), center, as_pts=True, positive=False)
+        center = complex(*r_top_xy[-1]) - (complex(*r_top_xy[-1] - r_bottom_xy[0]) / 2)
+        stop_cap = get_bezier_half_circle(
+            complex(*r_top_xy[-1]), complex(*r_bottom_xy[0]), center, as_pts=True, positive=False)
+
+        xy = np.concatenate((r_top_xy, stop_cap, r_bottom_xy, start_cap), axis=0)
+
+        return path_from_pts(xy, close=True), r_midline_xy
         
 
+        
+        
         
 

@@ -6,7 +6,8 @@ from svgpathtools import Path, Line
 
 from beautiful_tensors.rendering.strokes import ImageStroke, DEFAULT_DISTANCES
 from beautiful_tensors.rendering.fills import PathFill
-from beautiful_tensors.rendering.utils import rotate_pts, path_from_pts, flatten_paths
+from beautiful_tensors.rendering.text import Text
+from beautiful_tensors.rendering.utils import rotate_pts, path_from_pts, flatten_paths, get_bezier_arc
 
 DEFAULT_STROKE_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 4 (2).png'
 DEFAULT_FILL_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 5.svg'
@@ -47,6 +48,42 @@ def make_rectangle(stroke, height, width, stroke_width=1., deg=90):
     paths = [top, right, bottom, left]
     
     return paths, xy
+
+
+def make_rounded_rectangle(stroke, height, width, stroke_width=1., radius=None,
+                           top_left=complex(0, 0), fidelity=200):
+    if radius is None:
+        radius = height * .1
+    
+    top_start = top_left + complex(radius, 0)
+    top_stop = top_left + complex(width - radius, 0)
+    right_start = top_left + complex(width, radius)
+    right_stop = top_left + complex(width, height - radius)
+    bottom_start = top_left + complex(width - radius, height)
+    bottom_stop = top_left + complex(radius, height)
+    left_start = top_left + complex(0, height - radius)
+    left_stop = top_left + complex(0, radius)
+    
+    tl_arc = get_bezier_arc(left_stop, top_start, top_left + complex(radius, radius))
+    tr_arc = get_bezier_arc(top_stop, right_start, top_left + complex(width - radius, radius))
+    br_arc = get_bezier_arc(right_stop, bottom_start, top_left + complex(width - radius, height - radius))
+    bl_arc = get_bezier_arc(bottom_stop, left_start, top_left + complex(radius, height - radius))
+    top = Line(top_start, top_stop)
+    right = Line(right_start, right_stop)
+    bottom = Line(bottom_start, bottom_stop)
+    left = Line(left_start, left_stop)
+    
+    path = Path(tl_arc, top, tr_arc, right, br_arc, bottom, bl_arc, left)
+
+    # unfortunately need to get rid of the beziers so downstream intersect operation dont break
+    # find a way to fix this eventually
+    path = path_from_pts([[path.point(x).real, path.point(x).imag]
+                          for x in np.linspace(0, .999, fidelity)], close=False)
+
+    rect_fit, rect_fit_xy = stroke.fit_to_path(path, stroke_width=stroke_width)
+    
+    return rect_fit, rect_fit_xy
+
 
 def make_arrow(stroke, length, stroke_width=1., deg=90,
                head_scale=.1):
@@ -94,6 +131,7 @@ class Shape(object):
         self.boundary = None
         self.fill_paths = []
         self.stroke_width = 1
+        self.texts = []
 
     def rotate(self, deg):
         origin = self.stroke_paths[0].point(0.)
@@ -101,6 +139,9 @@ class Shape(object):
         self.fill_paths = [p.rotated(deg, origin) for p in self.fill_paths]
         self.boundary = self.boundary.rotated(deg, origin)
         self.stroke_xy = rotate_pts(self.stroke_xy, deg, origin=origin)
+
+        for t in self.texts:
+            t.rotate(deg, origin)
 
     def translate(self, offset):
         if isinstance(offset, complex) or isinstance(offset, np.complex128):
@@ -111,6 +152,9 @@ class Shape(object):
 
         if self.boundary is not None:
             self.boundary = self.boundary.translated(complex(offset[0], offset[1]))
+
+        for t in self.texts:
+            t.translate(complex(offset[0], offset[1]))
 
     def to_renderable(self,
                fill_stroke_width=None, fill_stroke_color='#80a2bd',
@@ -130,6 +174,8 @@ class Shape(object):
         attbs += [{
             'stroke': stroke_stroke_color, 'stroke-width': stroke_stroke_width, 'fill': stroke_fill_color
         }] * len(self.stroke_paths)
+
+        
 
         return paths, attbs
     
@@ -161,7 +207,10 @@ class Shape(object):
 
 class Rectangle(Shape):
     def __init__(self, height, width, top_left=(0, 0), deg=90,
-                 fill='default', stroke='default', stroke_width=None):
+                 fill='default', stroke='default', stroke_width=None,
+                 center_text=None, left_text=None, top_text=None, bottom_text=None,
+                 center_text_scale=.2, side_text_scale=.1, bottom_text_scale=.2,
+                 rotate_left_text=True):
         super().__init__()
         self.c1, self.r1 = [int(x) for x in top_left]
         self.height = height
@@ -170,7 +219,33 @@ class Rectangle(Shape):
         self.deg = deg
         self.stroke = stroke if stroke != 'default' else DEFAULT_STROKE
         self.fill = fill if fill != 'default' else DEFAULT_FILL
-        
+
+        self.texts = []
+        if center_text is not None:
+            font_size = int(center_text_scale * height)
+            self.texts.append(Text(
+                center_text, complex(width / 2, height / 2),
+                font_size=font_size, tag='center_text'))
+        if bottom_text is not None:
+            font_size = int(bottom_text_scale * height)
+            pad = font_size / 2
+            self.texts.append(Text(
+                bottom_text, complex(width / 2, height + pad),
+                font_size=font_size, tag='bottom_text'))
+        if left_text is not None:
+            font_size = int(side_text_scale * height)
+            pad = font_size / 2
+            self.texts.append(Text(
+                left_text, complex(-pad, height / 2),
+                font_size=font_size, tag='left_text',
+                rotation=90 if rotate_left_text else 0))
+        if top_text is not None:
+            font_size = int(side_text_scale * height)
+            pad = font_size / 2
+            self.texts.append(Text(
+                top_text, complex(width / 2, -pad),
+                font_size=font_size, tag='top_text'))
+
         self.stroke_paths, self.stroke_xy = make_rectangle(
             self.stroke, height, width, stroke_width=stroke_width, deg=deg)
         self.boundary = path_from_pts(self.stroke_xy, close=True)
@@ -178,16 +253,28 @@ class Rectangle(Shape):
         self.fill_paths = flatten_paths(self.fill.sample(self.boundary))
 
         self.translate((self.c1, self.r1))
+    
 
-    def copy(self):
-        new = Rectangle(
-            self.height, self.width, top_left=(self.r1, self.c1),
-            stroke=self.stroke, stroke_width=self.stroke_width)
-        new.stroke_paths = [p for p in self.stroke_paths]
-        new.stroke_xy = self.stroke_xy.copy()
-        new.boundary = self.boundary
-        new.fill_paths = [p for p in self.fill_paths]
-        return new
+class RoundedRectangle(Shape):
+    def __init__(self, height, width, top_left=(0, 0), radius=None,
+                 fill='default', stroke='default', stroke_width=None):
+        super().__init__()
+        self.c1, self.r1 = [int(x) for x in top_left]
+        self.height = height
+        self.width = width
+        self.stroke_width = stroke_width
+        self.radius = radius
+        self.stroke = stroke if stroke != 'default' else DEFAULT_STROKE
+        self.fill = fill if fill != 'default' else DEFAULT_FILL
+        
+        self.stroke_paths, self.stroke_xy = make_rounded_rectangle(
+            self.stroke, height, width, stroke_width=stroke_width, radius=radius)
+        self.stroke_paths = [self.stroke_paths]
+        self.boundary = path_from_pts(self.stroke_xy, close=True)
+
+        self.fill_paths = flatten_paths(self.fill.sample(self.boundary))
+
+        self.translate((self.c1, self.r1))
 
 
 class Cube(Shape):
