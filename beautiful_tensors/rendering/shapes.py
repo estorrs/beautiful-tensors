@@ -5,16 +5,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 from svgpathtools import Path, Line
 
+from beautiful_tensors.rendering.themes import DEFAULT_THEME
 from beautiful_tensors.rendering.strokes import ImageStroke, DEFAULT_DISTANCES
 from beautiful_tensors.rendering.fills import PathFill
-from beautiful_tensors.rendering.text import Text, get_square_text, get_cube_text
+from beautiful_tensors.rendering.text import Text, get_square_text, get_cube_text, get_arrow_text
 from beautiful_tensors.rendering.utils import rotate_pts, path_from_pts, flatten_paths, get_bezier_arc, show_svg
-
-DEFAULT_STROKE_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 4 (2).png'
-DEFAULT_FILL_FP = '/data/estorrs/beautiful-tensors/data/sandbox/concepts/New Drawing 5.svg'
-
-DEFAULT_STROKE = ImageStroke(DEFAULT_STROKE_FP)
-DEFAULT_FILL = PathFill(DEFAULT_FILL_FP)
 
 
 def make_rectangle(stroke, height, width, stroke_width=1., deg=90):
@@ -158,10 +153,12 @@ class Shape(object):
             t.translate(complex(offset[0], offset[1]))
 
     def to_renderable(self,
-               fill_stroke_width=None, fill_stroke_color='#80a2bd',
-               fill_fill_color='none',
-               stroke_stroke_width=None, stroke_fill_color='#7e807f',
-               stroke_stroke_color='#7e807f'):
+               fill_stroke_width=DEFAULT_THEME['rendering']['fill']['stroke_width'],
+               fill_stroke_color=DEFAULT_THEME['rendering']['fill']['stroke_color'],
+               fill_fill_color=DEFAULT_THEME['rendering']['fill']['fill_color'],
+               stroke_stroke_width=DEFAULT_THEME['rendering']['stroke']['stroke_width'],
+               stroke_fill_color=DEFAULT_THEME['rendering']['stroke']['fill_color'],
+               stroke_stroke_color=DEFAULT_THEME['rendering']['stroke']['stroke_color']):
         fill_stroke_width = fill_stroke_width if fill_stroke_width is not None else self.stroke_width / 4
         stroke_stroke_width = stroke_stroke_width if stroke_stroke_width is not None else self.stroke_width / 12
 
@@ -179,10 +176,13 @@ class Shape(object):
         return paths, attbs
     
     def to_xml(self, as_string=False,
-               fill_stroke_width=None, fill_stroke_color='#80a2bd',
-               fill_fill_color='none',
-               stroke_stroke_width=None, stroke_fill_color='#7e807f',
-               stroke_stroke_color='#7e807f', opacity=1.):
+               fill_stroke_width=DEFAULT_THEME['rendering']['fill']['stroke_width'],
+               fill_stroke_color=DEFAULT_THEME['rendering']['fill']['stroke_color'],
+               fill_fill_color=DEFAULT_THEME['rendering']['fill']['fill_color'],
+               stroke_stroke_width=DEFAULT_THEME['rendering']['stroke']['stroke_width'],
+               stroke_fill_color=DEFAULT_THEME['rendering']['stroke']['fill_color'],
+               stroke_stroke_color=DEFAULT_THEME['rendering']['stroke']['stroke_color'],
+               opacity=1.):
         paths, attbs = self.to_renderable(
             fill_stroke_width=fill_stroke_width, fill_stroke_color=fill_stroke_color,
             fill_fill_color=fill_fill_color, stroke_stroke_width=stroke_stroke_width,
@@ -212,21 +212,26 @@ class Rectangle(Shape):
     def __init__(self, height, width, top_left=(0, 0), deg=90,
                  fill='default', stroke='default', stroke_width=None,
                  center_text=None, left_text=None, top_text=None, bottom_text=None,
-                 center_text_scale=.2, side_text_scale=.1, bottom_text_scale=.2,
-                 rotate_left_text=True):
+                 major_font_size=None, minor_font_size=None,
+                 rotate_left_text=None):
         super().__init__()
+        stroke_width = stroke_width if stroke_width is not None else DEFAULT_THEME['stroke']['stroke_width']
+        major_font_size = major_font_size if major_font_size is not None else DEFAULT_THEME['text']['major_font_size']
+        minor_font_size = minor_font_size if minor_font_size is not None else DEFAULT_THEME['text']['minor_font_size']
+        rotate_left_text = rotate_left_text if rotate_left_text is not None else DEFAULT_THEME['text']['rotate_left_text']
+
         self.c1, self.r1 = [int(x) for x in top_left]
         self.height = height
         self.width = width
         self.stroke_width = stroke_width
         self.deg = deg
-        self.stroke = stroke if stroke != 'default' else DEFAULT_STROKE
-        self.fill = fill if fill != 'default' else DEFAULT_FILL
+        self.stroke = stroke if stroke != 'default' else DEFAULT_THEME['stroke']['stroke']
+        self.fill = fill if fill != 'default' else DEFAULT_THEME['fill']['fill']
 
         self.texts = get_square_text(
             height, width,
             center_text=center_text, bottom_text=bottom_text, left_text=left_text, top_text=top_text,
-            center_text_scale=center_text_scale, bottom_text_scale=bottom_text_scale, side_text_scale=side_text_scale,
+            major_font_size=major_font_size, minor_font_size=minor_font_size,
             padding=stroke_width, rotate_left_text=rotate_left_text)
 
         self.stroke_paths, self.stroke_xy = make_rectangle(
@@ -242,21 +247,25 @@ class RoundedRectangle(Shape):
     def __init__(self, height, width, top_left=(0, 0), radius=None,
                  fill='default', stroke='default', stroke_width=None,
                  center_text=None, left_text=None, top_text=None, bottom_text=None,
-                 center_text_scale=.2, side_text_scale=.1, bottom_text_scale=.2,
-                 rotate_left_text=True):
+                 major_font_size=None, minor_font_size=None, rotate_left_text=None):
         super().__init__()
+        stroke_width = stroke_width if stroke_width is not None else DEFAULT_THEME['stroke']['stroke_width']
+        major_font_size = major_font_size if major_font_size is not None else DEFAULT_THEME['text']['major_font_size']
+        minor_font_size = minor_font_size if minor_font_size is not None else DEFAULT_THEME['text']['minor_font_size']
+        rotate_left_text = rotate_left_text if rotate_left_text is not None else DEFAULT_THEME['text']['rotate_left_text']
+
         self.c1, self.r1 = [int(x) for x in top_left]
         self.height = height
         self.width = width
         self.stroke_width = stroke_width
         self.radius = radius
-        self.stroke = stroke if stroke != 'default' else DEFAULT_STROKE
-        self.fill = fill if fill != 'default' else DEFAULT_FILL
+        self.stroke = stroke if stroke != 'default' else DEFAULT_THEME['stroke']['stroke']
+        self.fill = fill if fill != 'default' else DEFAULT_THEME['fill']['fill']
 
         self.texts = get_square_text(
             height, width,
             center_text=center_text, bottom_text=bottom_text, left_text=left_text, top_text=top_text,
-            center_text_scale=center_text_scale, bottom_text_scale=bottom_text_scale, side_text_scale=side_text_scale,
+            major_font_size=major_font_size, minor_font_size=minor_font_size,
             padding=stroke_width, rotate_left_text=rotate_left_text)
         
         self.stroke_paths, self.stroke_xy = make_rounded_rectangle(
@@ -273,9 +282,15 @@ class Cube(Shape):
     def __init__(self, height, width, depth, top_left=(0, 0), deg=90, deg_top=135,
                 fill='default', stroke='default', stroke_width=None,
                  center_text=None, left_text=None, top_text=None, bottom_text=None, depth_text=None,
-                 center_text_scale=.2, side_text_scale=.1, bottom_text_scale=.2,
-                 rotate_left_text=True, rotate_depth_text=True):
+                 major_font_size=None, minor_font_size=None,
+                 rotate_left_text=None, rotate_depth_text=None):
         super().__init__()
+        stroke_width = stroke_width if stroke_width is not None else DEFAULT_THEME['stroke']['stroke_width']
+        major_font_size = major_font_size if major_font_size is not None else DEFAULT_THEME['text']['major_font_size']
+        minor_font_size = minor_font_size if minor_font_size is not None else DEFAULT_THEME['text']['minor_font_size']
+        rotate_left_text = rotate_left_text if rotate_left_text is not None else DEFAULT_THEME['text']['rotate_left_text']
+        rotate_depth_text = rotate_depth_text if rotate_depth_text is not None else DEFAULT_THEME['text']['rotate_depth_text']
+
         self.c1, self.r1 = [int(x) for x in top_left]
         self.height = height
         self.width = width
@@ -283,8 +298,8 @@ class Cube(Shape):
         self.deg = deg
         self.depth = self.width if depth is None else depth
         
-        self.stroke = stroke if stroke != 'default' else DEFAULT_STROKE
-        self.fill = fill if fill != 'default' else DEFAULT_FILL
+        self.stroke = stroke if stroke != 'default' else DEFAULT_THEME['stroke']['stroke']
+        self.fill = fill if fill != 'default' else DEFAULT_THEME['fill']['fill']
 
         (top_center, right_center, bottom_center, left_center), xy_center = make_rectangle(
             self.stroke, height, width, stroke_width=stroke_width, deg=deg)
@@ -328,7 +343,7 @@ class Cube(Shape):
         self.texts = get_cube_text(
             height, width,
             center_text=center_text, bottom_text=bottom_text, left_text=left_text, top_text=top_text,
-            center_text_scale=center_text_scale, bottom_text_scale=bottom_text_scale, side_text_scale=side_text_scale,
+            major_font_size=major_font_size, minor_font_size=minor_font_size,
             padding=stroke_width, rotate_left_text=rotate_left_text,
             depth_text=depth_text, depth_pt=pt, depth_normal=depth_normal, rotate_depth_text=rotate_depth_text
             )
@@ -351,14 +366,23 @@ class Cube(Shape):
 
 class Arrow(Shape):
     def __init__(self, length, top_left=(0, 0), deg=90,
-                 stroke='default', stroke_width=None, head_scale=.1):
+                 stroke='default', stroke_width=None, head_scale=.1,
+                 top_text=None, bottom_text=None,
+                 font_size=None, rotate_text=True):
         super().__init__()
+        stroke_width = stroke_width if stroke_width is not None else DEFAULT_THEME['stroke']['stroke_width']
+        font_size = font_size if font_size is not None else DEFAULT_THEME['text']['minor_font_size']
+        
         self.c1, self.r1 = [int(x) for x in top_left]
         self.length = length
         self.stroke_width = stroke_width
         self.deg = deg
-        self.stroke = stroke if stroke != 'default' else DEFAULT_STROKE
+        self.stroke = stroke if stroke != 'default' else DEFAULT_THEME['stroke']['stroke']
         self.head_scale = head_scale
+
+        self.texts = get_arrow_text(
+            length, top_text=top_text, bottom_text=bottom_text,
+            font_size=font_size, rotate_text=rotate_text, padding=stroke_width)
         
         self.stroke_paths, self.stroke_xy = make_arrow(
             self.stroke, length, stroke_width=stroke_width, deg=deg, head_scale=head_scale)
